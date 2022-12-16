@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang='en'>
+
+<head>
+    <meta charset='utf-8'>
+    <meta http-equiv='X-UA-Compatible' content='IE=edge'>
+    <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <meta name='mobile-web-app-capable' content='yes'>
+    <title>LumiNixie</title>
+
+    <link rel='stylesheet' href='index.css'>
+	<script src='fallback.min.js'></script>
+    
+    <script>
+    	// Use the fallback library to load libraries, prefer CDN hosted, fallback to local.
+    	// This is done to load as less as possible from the ESP8266.
+
+		const libraries = {
+			// Include your stylesheets, this can be an array of stylesheets or a string!
+			page_css: 'index.css',
+
+			'css$font-awesome': {
+				// Fallback JS will check to see if this style currently exists on the
+				// page. If it does exist, the library will not attempt to load the file
+				// as it will assume it's already been loaded on the page.
+				exports: '.fa-eye',
+
+				urls: [
+					'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css',
+					'font-awesome.min.css'
+				]
+			},
+			'css$bootstrap': {
+				// Fallback JS will check to see if this style currently exists on the
+				// page. If it does exist, the library will not attempt to load the file
+				// as it will assume it's already been loaded on the page.
+				exports: '.col-xs-12',
+
+				urls: [
+					'https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.4.1/css/bootstrap.min.css',
+					'bootstrap.min.css'
+				]
+			},
+			jQuery: {
+				urls: [
+					// When the first will fail, Fallback JS will load the second, etc.
+					'https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js',
+					'jquery.min.js'
+				]
+			},
+			bootstrap: {
+				urls: [
+					'https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.4.1/js/bootstrap.bundle.min.js',
+					'bootstrap.bundle.min.js'
+				]
+			}
+		};
+
+		const options = {
+			// Shim bootstrap so that it will only load after jQuery has completed!
+			shim: {
+				'bootstrap': ['jQuery']
+			},
+			callback: function (success, failed) {
+				init();
+				$('.container').removeAttr('style');
+			}
+		};
+
+		// Here we actually invoke Fallback JS to retrieve the following libraries for the page.
+		fallback.load(libraries, options);
+
+		Date.prototype.toDateInputValue = (function() {
+		    const local = new Date(this);
+		    local.setMinutes(this.getMinutes() - this.getTimezoneOffset());
+		    return local.toJSON().slice(0,10);
+		});
+
+		Date.prototype.toTimeInputValue = (function() {
+		    const local = new Date(this);
+		    local.setMinutes(this.getMinutes() - this.getTimezoneOffset());
+		    return local.toJSON().slice(11,19);
+		});
+
+		
+		let configuration = null;
+		// configuration = {
+		// 	showDate: true, 
+		// 	ledColorR: 0, ledColorG: 0, ledColorB: 200, 
+		// 	knightRiderLedColorR: 255, knightRiderLedColorG: 0, knightRiderLedColorB: 0,
+		// 	ledMode: 1, ledRainbowSpeed: 100
+		// };
+		
+		const url = '/configuration';
+
+		function init() {
+			console.log('init()');
+
+			$('#led-brightness').change((event) => {
+				configuration.ledBrightness = +event.target.value;
+			});
+			$('#_led-mode').change((event) => {
+				configuration.ledMode = +event.target.value;
+				updateUi();
+			});
+			$('#led-color').change((event) => {
+				const hexColor = event.target.value;
+				configuration.ledColorR = +('0x' + hexColor[1] + hexColor[2]);
+				configuration.ledColorG = +('0x' + hexColor[3] + hexColor[4]);
+				configuration.ledColorB = +('0x' + hexColor[5] + hexColor[6]);
+			});
+			$('#led-knightrider-color').change((event) => {
+				const hexColor = event.target.value;
+				configuration.knightRiderLedColorR = +('0x' + hexColor[1] + hexColor[2]);
+				configuration.knightRiderLedColorG = +('0x' + hexColor[3] + hexColor[4]);
+				configuration.knightRiderLedColorB = +('0x' + hexColor[5] + hexColor[6]);
+			});
+			$('#led-rainbow-speed').change((event) => {
+				configuration.ledRainbowSpeed = +event.target.value;
+			});
+			$('#connection-mode').change((event) => {
+				configuration.connectionMode = +event.target.value;
+				updateUi();
+			});
+			$('#wifi-ssid').change((event) => {
+				configuration.wifiSsid = event.target.value;
+			});
+			$('#wifi-password').change((event) => {
+				configuration.wifiPassword = event.target.value;
+			});
+			$('#time-dots-mode').change((event) => {
+				configuration.timeDotsMode = +event.target.value;
+			});
+			$('#show-date').change((event) => {
+				configuration.showDate = $('#show-date').is(':checked');
+			});
+			$('#show-temperature').change((event) => {
+				configuration.showTemperature = $('#show-temperature').is(':checked');
+			});
+			$('#show-humidity').change((event) => {
+				configuration.showHumidity = $('#show-humidity').is(':checked');
+			});
+			$('#toggle-wifi-password').click(() => {
+			  $('#toggle-wifi-password-icon').toggleClass('fa-eye fa-eye-slash');
+			  const input = $('#wifi-password');
+			  if (input.attr('type') === 'password') {
+			    input.attr('type', 'text');
+			  } else {
+			    input.attr('type', 'password');
+			  }
+			});
+			$('#alert-close').click(() => {
+				hideAlert();
+			});
+			$('#btn-save').click(function() {
+				save();
+			});
+			loadConfiguration();
+		}
+
+		function updateUi() {
+			console.log('updateUi()');
+
+			$('#led-brightness').val(configuration.ledBrightness);
+			$('#time-dots-mode').val(configuration.timeDotsMode);
+			$('#show-date').prop('checked', configuration.showDate);
+			$('#show-temperature').prop('checked', configuration.showTemperature);
+			$('#show-humidity').prop('checked', configuration.showHumidity);
+
+			const r = prependZeroWhenLenghtIsOne(configuration.ledColorR.toString(16));
+			const g = prependZeroWhenLenghtIsOne(configuration.ledColorG.toString(16));
+			const b = prependZeroWhenLenghtIsOne(configuration.ledColorB.toString(16));
+			$('#led-color').val('#' + r + g + b);
+			$('#led-mode').val(configuration.ledMode);
+			$('#led-rainbow-speed').val(configuration.ledRainbowSpeed);
+			$('#_led-rainbow-speed').toggle(configuration.ledMode === 1);
+			$('#_led-color').toggle(configuration.ledMode === 0);
+			$('#_led-knightrider-color').toggle(configuration.ledMode === 2);
+			
+			const knightRiderR = prependZeroWhenLenghtIsOne(configuration.knightRiderLedColorR.toString(16));
+			const knightRiderG = prependZeroWhenLenghtIsOne(configuration.knightRiderLedColorG.toString(16));
+			const knightRiderB = prependZeroWhenLenghtIsOne(configuration.knightRiderLedColorB.toString(16));
+			$('#led-knightrider-color').val('#' + knightRiderR + knightRiderG + knightRiderB);
+
+			$('#connection-mode').val(configuration.connectionMode);
+			$('#wifi-ssid').val(configuration.wifiSsid);
+			$('#wifi-password').val(configuration.wifiPassword);
+			$('#_wifi-ssid').toggle(configuration.connectionMode === 1);
+			$('#_wifi-password').toggle(configuration.connectionMode === 1);
+			$('#_datetime').toggle(configuration.connectionMode === 0);
+			$('#date').val(new Date().toDateInputValue());
+			$('#time').val(new Date().toTimeInputValue());
+			$('#form').removeClass('d-none');
+		}
+
+		function prependZeroWhenLenghtIsOne(value) {
+			if (value.length === 1) {
+				return '0' + value;
+			}
+			return value;
+		}
+
+		function loadConfiguration() {
+			var jqxhr = $.getJSON( url, {})
+				 .done(function(data) {
+				 	configuration = data;
+					updateUi();
+				 })
+				 .fail(function() {
+				 	showErrorAlert('Failed to load configuration :-(');
+				 });
+		}
+
+		function showErrorAlert(message) {
+			$('#alert-message').text(message);
+			$('#alert').removeClass('d-none');
+			$('#alert').removeClass('alert-success');
+			$('#alert').removeClass('alert-info');
+			$('#alert').removeClass('alert-warning');
+			$('#alert').addClass('alert-danger');
+		}
+
+		function hideAlert() {
+			$('#alert').addClass('d-none');
+		}
+
+		function save() {
+			console.log('save()');
+
+			if (+($('#connection-mode').val()) === 0 && $('#set-date-time').is(':checked')) {
+				configuration.hour = +($('#time').val().slice(0,2));
+				configuration.minute = +($('#time').val().slice(3,5));
+				configuration.second = +($('#time').val().slice(6,8))
+				configuration.day = +($('#date').val().slice(8,10));
+				configuration.month = +($('#date').val().slice(5,7));
+				configuration.year = +($('#date').val().slice(0,4));
+			} else {
+				delete configuration.hour;
+				delete configuration.minute;
+				delete configuration.second;
+				delete configuration.day;
+				delete configuration.month;
+				delete configuration.year;
+			}
+			console.log(JSON.stringify(configuration));
+
+			$('fieldset').attr('disabled', 'true');
+			$('#save-spinner').removeClass('invisible');
+
+			$.ajax({
+				type: 'POST',
+				url: url,
+				data: JSON.stringify(configuration),
+				success: function(data) { 
+					$('fieldset').removeAttr('disabled');
+					$('#save-spinner').addClass('invisible');
+					console.log(data);
+				},
+				error: function() { showErrorAlert('Failed to save'); },
+				contentType: 'text/plain',
+				dataType: 'json'
+			});
+		}
+	</script>
+</head>
+
+<body>
+	<div class='container' style='display: none'>
+	    <div class='row'>
+	        <div class='col'></div>
+	        <div class='col-sm-9 col-md-7 col-lg-5'>
+	            <h1>LumiNixie</h1>
+
+				<div id='alert' class='alert d-none'>
+				  <button id='alert-close' type='button' class='close'>
+				    <span>&times;</span>
+				  </button>
+				  <span id='alert-message'></span>
+				</div>
+
+				<div id='form' class='d-none'>
+		            <fieldset>
+		                <legend>LED's</legend>
+		                <label for='led-brightness'>Brightness (0% &harr; 100%):</label>
+		                <input id='led-brightness' class='slider' type='range' min='0' max='255'>
+
+		                <div id='_led-mode' class='form-group'>
+	                        <label>Mode:</label>
+	                        <select id='led-mode' class='form-control'>
+	                          <option value='0'>Fixed color</option>
+	                          <option value='1'>Rainbow</option>
+	                          <option value='2'>Knight Rider</option>
+							</select>		                	
+		                </div>
+
+						<div id='_led-color' class='form-group'>
+							<label for='led-color'>Fixed color:</label>
+		                	<input id='led-color' class='colorpicker' type='color'></p>
+		                </div>
+						<div id='_led-knightrider-color' class='form-group'>
+							<label for='led-knightrider-color'>Knightrider color:</label>
+		                	<input id='led-knightrider-color' class='colorpicker' type='color'></p>
+		                </div>
+						<div id='_led-rainbow-speed' class='form-group'>
+							<label for='led-rainbow-speed'>Speed of color changes (fast &harr; slow):</label>
+		                	<input id='led-rainbow-speed' class='slider' type='range' min='1' max='10000'></p>
+		                </div>
+
+		            </fieldset>
+		            <fieldset>
+		                <legend>Nixie tubes</legend>
+		                <div class='form-group'>
+		                    <label for='time-dots-mode'>Time dots mode:</label>
+		                    <select id='time-dots-mode' class='form-control'>
+		                        <option value='0'>Blink</option>
+		                        <option value='1'>On</option>
+		                        <option value='2'>Off</option>
+		                    </select>
+		                </div>
+						<div class='form-check'>
+		                	<input id='show-date' class='form-check-input' type='checkbox'>
+		                	<label for='show-date' class='form-check-label'>Show date</label>
+						</div>
+						<div class='form-check'>
+		                	<input id='show-temperature' class='form-check-input' type='checkbox'>
+		                	<label for='show-temperature' class='form-check-label'>Show temperature</label>
+						</div>
+						<div class='form-check'>
+		                	<input id='show-humidity' class='form-check-input' type='checkbox'>
+		                	<label for='show-humidity' class='form-check-label'>Show humidity</label>
+						</div>
+						<p></p>
+		            </fieldset>
+		            <fieldset>
+		                <legend>Connection</legend>
+		                <div class='form-group'>
+		                    <label for='connection-mode'>Mode:</label>
+		                    <select id='connection-mode' class='form-control'>
+		                        <option value='0'>Access Point (AP)</option>
+		                        <option value='1'>Station (STA)</option>
+		                    </select>
+		                </div>
+		                <div id='_wifi-ssid' class='form-group'>
+		                    <label for='wifi-ssid'>SSID:</label>
+		                    <input type='text' id='wifi-ssid' size='30' maxlength='50' class='form-control'>
+		                </div>
+		                <div id='_wifi-password' class='form-group'>
+		                    <label for='wifi-password'>Password:</label>
+		                    <div class='input-group'>
+		                        <input type='password' id='wifi-password' size='30' maxlength='50' class='form-control'>
+		                        <div class='input-group-append'>
+		                            <span id='toggle-wifi-password' class='input-group-text'>
+		                                <i id='toggle-wifi-password-icon' class='fa fa-eye'></i>
+		                            </span>
+		                        </div>
+		                    </div>
+		                </div>
+		            </fieldset>
+		            <fieldset id='_datetime'>
+		                <legend>Set time / date</legend>
+		                <div class='row'>
+		                    <div class='col-1'>
+		                        <input type='checkbox' id='set-date-time' class='form-check'>
+		                    </div>
+		                    <div class='col-5'>
+		                        <input type='time' id='time' step='1' class='form-control'>
+		                    </div>
+		                    <div class='col-6'>
+		                        <input type='date' id='date' class='form-control'>
+		                    </div>
+		                </div>
+		            </fieldset>
+		            <p></p>
+		            <fieldset id='_save'>
+			            <div>
+			                <button id='btn-save' class='btn btn-primary btn-block'>Apply and save <i id='save-spinner' class='fa fa-refresh fa-spin invisible'></i></button>
+			            </div>
+			        </fieldset>
+				</div>
+	        </div>
+	        <div class='col'></div>
+	    </div>
+	</div>
+</body>
+
+</html>
